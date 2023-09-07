@@ -4,3 +4,4 @@ nested block effect as random effects. LSD calcualtion is custom and does not ha
 all files into the same sub folder and load in together in R.  
 The most current two stage analysis accepts trial mean output from a Genovix server which allows
 researchers to preserve trial results across locations in final summaries more consistently.
+ 
