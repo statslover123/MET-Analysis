@@ -1,0 +1,236 @@
+Load R packages, name output files as needed on lines 11-13 and change what years you need to analzye in in line 24. Drop all genovix means files into a folder and update the path on line 19 to reach it. The code is split between hard, soft, and herbicide analysis for yield, protein, and test weight. run each chunk as needed. Line 26 must be updated to have the locations you want to analyze!!! hash it out # if this is annoying to update
+```{r}
+library(dplyr)
+library(tidyverse)
+library(stringr)
+library(lme4)
+library(emmeans)
+library(readxl)
+#csv_namesoft<-paste('under12_2year','soft.csv')
+#csv_namehard<-paste('under12_2year','hard.csv')
+#csv_nameherb<-paste('under12_2year','herb.csv')
+#lsd calc
+lsd_cal<-function(t_value,mse,df){t_value*sqrt(mse*(2/df))}
+setwd("C:/Users/schmu/Downloads/test/")
+fnames <- list.files()
+csv <- lapply(fnames, read_excel)
+result <- do.call(plyr::rbind.fill, csv)
+result<-result[complete.cases(result$Name1),]
+result$YLD_BUA<-as.numeric(result$YLD_BUA)
+result$TW<-as.numeric(result$TW)
+result$PROTEIN<-as.numeric(result$PROTEIN)
+
+result<-result %>% 
+  filter(!(str_detect(`Experiment Name`, 'XX|xx')))
+raw2<-result %>%
+  filter(str_detect(Year, '2023|2020|2021'))
+raw2$yearloc <- paste(raw2$Location, raw2$Year, sep="_")
+raw2<-raw2[raw2$Location  %in% c('Harrington','Lind','Ritzville','Horse Heaven'),]
+hard<-raw2 %>%
+  filter(str_detect(`Experiment Name`, 'Hard'))
+soft<-raw2 %>%
+  filter(str_detect(`Experiment Name`, 'SW'))
+
+```
+
+Soft analysis for yield, protein, TW
+```{r}
+softlist<- soft %>% dplyr::group_by(Name1) %>% dplyr::summarise(n=n_distinct(`Experiment Name`)) %>%   dplyr::filter(n>=length(unique(soft$`Experiment Name`))) %>% dplyr::pull(Name1)
+rawSOFT<-soft[soft$Name1 %in% softlist,]
+rawSOFT<-rawSOFT[rawSOFT$YLD_BUA> 0,]
+temporary = lm(YLD_BUA ~ Name1+`Experiment Name`,data=rawSOFT)
+softyield<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(rawSOFT$`Experiment Name`))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+softyield$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+softyield$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(softyield$emmean)*100
+LOCATIONS<-unique(rawSOFT$`Experiment Name`)
+softyield$Locations<-list(LOCATIONS)
+softyield$Trial<-'softyield'
+soft<-raw2 %>%
+  filter(str_detect(`Experiment Name`, 'SW'))
+softlist<- soft %>% dplyr::group_by(Name1) %>% dplyr::summarise(n=n_distinct(`Experiment Name`)) %>% 
+  dplyr::filter(n>=length(unique(soft$`Experiment Name`))) %>% dplyr::pull(Name1)
+rawSOFT<-soft[soft$Name1 %in% softlist,]
+rawSOFT<-rawSOFT[rawSOFT$TW> 0,]
+temporary = lm(TW ~ Name1+`Experiment Name`,data=rawSOFT)
+softtw<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(rawSOFT$`Experiment Name`))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+softtw$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+softtw$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(softtw$emmean)*100
+LOCATIONS<-unique(rawSOFT$`Experiment Name`)
+softtw$Locations<-list(LOCATIONS)
+softtw$Trial<-'softtw'
+
+soft<-raw2 %>%
+  filter(str_detect(`Experiment Name`, 'SW'))
+softlist<- soft %>% dplyr::group_by(Name1) %>% dplyr::summarise(n=n_distinct(`Experiment Name`)) %>% 
+  dplyr::filter(n>=length(unique(soft$`Experiment Name`))) %>% dplyr::pull(Name1)
+rawSOFT<-soft[soft$Name1 %in% softlist,]
+rawSOFT<-rawSOFT[rawSOFT$PROTEIN> 0,]
+temporary = lm(PROTEIN ~ Name1+`Experiment Name`,data=rawSOFT)
+softprotein<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(rawSOFT$`Experiment Name`))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+softprotein$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+softprotein$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(softtw$emmean)*100
+LOCATIONS<-unique(rawSOFT$`Experiment Name`)
+softprotein$Locations<-list(LOCATIONS)
+softprotein$Trial<-'softprotein'
+
+softresults3<-rbind(softyield,softprotein,softtw)
+softresults3 = subset(softresults3, select = c(Name1, emmean, cv,lsd,Trial,Locations))
+
+softresults3<-apply(softresults3,2,as.character)
+#write.csv(softresults3,csv_namesoft)
+```
+
+Hard analysis for yield , protein, tw
+
+```{r}
+hardlist<- hard %>%dplyr:: group_by(Name1) %>%dplyr:: summarise(n=n_distinct(`Experiment Name`)) %>% 
+  dplyr::filter(n>=length(unique(hard$`Experiment Name`))) %>%dplyr:: pull(Name1)
+rawHARD<-hard[hard$Name1 %in% hardlist,]
+rawHARD<-rawHARD[rawHARD$YLD_BUA> 0,]
+temporary = lm(YLD_BUA ~ Name1+`Experiment Name`,data=rawHARD)
+hardyield<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(rawHARD$`Experiment Name`))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+hardyield$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+hardyield$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(hardyield$emmean)*100
+LOCATIONS<-unique(rawHARD$`Experiment Name`)
+hardyield$Locations<-list(LOCATIONS)
+hardyield$Trial<-'hardyield'
+
+hardlist<- hard %>% dplyr::group_by(Name1) %>%dplyr:: summarise(n=n_distinct(`Experiment Name`)) %>% 
+  dplyr::filter(n>=length(unique(hard$`Experiment Name`))) %>%dplyr:: pull(Name1)
+rawHARD<-hard[hard$Name1 %in% hardlist,]
+rawHARD<-rawHARD[rawHARD$TW> 0,]
+temporary = lm(TW ~ Name1+`Experiment Name`,data=rawHARD)
+hardtw<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(rawHARD$`Experiment Name`))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+hardtw$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+hardtw$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(hardtw$emmean)*100
+LOCATIONS<-unique(rawHARD$`Experiment Name`)
+hardtw$Locations<-list(LOCATIONS)
+hardtw$Trial<-'hardtw'
+
+
+hardlist<- hard %>% dplyr::group_by(Name1) %>%dplyr:: summarise(n=n_distinct(`Experiment Name`)) %>% 
+  dplyr::filter(n>=length(unique(hard$`Experiment Name`))) %>%dplyr:: pull(Name1)
+rawHARD<-hard[hard$Name1 %in% hardlist,]
+rawHARD<-rawHARD[rawHARD$PROTEIN> 0,]
+temporary = lm(PROTEIN ~ Name1+`Experiment Name`,data=rawHARD)
+hardprotein<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(rawHARD$`Experiment Name`))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+hardprotein$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+hardprotein$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(hardtw$emmean)*100
+LOCATIONS<-unique(rawHARD$`Experiment Name`)
+hardprotein$Locations<-list(LOCATIONS)
+hardprotein$Trial<-'hardprotein'
+
+hardresult3<-rbind(hardyield,hardprotein,hardtw)
+hardresult3 = subset(hardresult3, select = c(Name1, emmean, cv,lsd,Trial,Locations))
+
+hardresult3<-apply(hardresult3,2,as.character)
+#write.csv(hardresult3,csv_namehard)
+```
+
+
+Herbicide analysis for yield, protein, tw
+```{r}
+raw3<-raw2 %>% 
+  filter(!(str_detect(`Experiment Name`, '2023 SW')))
+
+raw3[raw3=="LCS Shine (Check)"] <- "LCS Shine"
+raw3<-raw3 %>%
+  filter(str_detect(Name1, 'CL+|CLP|AX|LCS Shine|LINENAME'))
+raw3<-raw3[raw3$YLD_BUA> 0,]
+herblist<- raw3 %>%dplyr:: group_by(Name1) %>%dplyr:: summarise(n=n_distinct(yearloc)) %>% 
+  dplyr::filter(n>=length(unique(raw3$yearloc))) %>%dplyr:: pull(Name1)
+raw3<-raw3[raw3$Name1 %in% herblist,]
+
+temporary = lm(YLD_BUA ~ Name1+`Experiment Name`,data=raw3)
+herbyield<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(raw3$yearloc))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+herbyield$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+herbyield$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(herbyield$emmean)*100
+LOCATIONS<-unique(raw3$`Experiment Name`)
+herbyield$Locations<-list(LOCATIONS)
+herbyield$Trial<-'herbyield'
+count<-raw3 %>% dplyr::count(Name1)
+herbyield$n<-count$n
+
+raw3<-raw2 %>% 
+  filter(!(str_detect(`Experiment Name`, '2023 SW')))
+
+raw3[raw3=="LCS Shine (Check)"] <- "LCS Shine"
+raw3<-raw3 %>%
+  filter(str_detect(Name1, 'CL+|CLP|AX|LCS Shine|LINENAME'))
+raw3<-raw3[raw3$TW> 0,]
+herblist<- raw3 %>% dplyr::group_by(Name1) %>%dplyr:: summarise(n=n_distinct(yearloc)) %>% 
+  dplyr::filter(n>=length(unique(raw3$yearloc))) %>%dplyr:: pull(Name1)
+raw3<-raw3[raw3$Name1 %in% herblist,]
+temporary = lm(TW ~ Name1+`Experiment Name`,data=raw3)
+herbtw<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(raw3$yearloc))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+herbtw$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+herbtw$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(herbtw$emmean)*100
+LOCATIONS<-unique(raw3$`Experiment Name`)
+herbtw$Locations<-list(LOCATIONS)
+herbtw$Trial<-'herbtw'
+count<-raw3 %>% dplyr::count(Name1)
+herbtw$n<-count$n
+
+raw3<-raw2 %>% 
+  filter(!(str_detect(`Experiment Name`, '2023 SW')))
+
+raw3[raw3=="LCS Shine (Check)"] <- "LCS Shine"
+raw3<-raw3 %>%
+  filter(str_detect(Name1, 'CL+|CLP|AX|LCS Shine|LINENAME'))
+raw3<-raw3[raw3$PROTEIN> 0,]
+herblist<- raw3 %>% dplyr::group_by(Name1) %>% dplyr::summarise(n=n_distinct(yearloc)) %>% 
+  dplyr::filter(n>=length(unique(raw3$yearloc))) %>% dplyr::pull(Name1)
+raw3<-raw3[raw3$Name1 %in% herblist,]
+temporary = lm(PROTEIN ~ Name1+`Experiment Name`,data=raw3)
+herbprotein<-as.data.frame(emmeans(temporary,specs='Name1'))
+df4lsd<-3*length(unique(raw3$yearloc))
+errorhard_df<-df.residual(temporary)
+therb<-abs(qt(p = .05, df = errorhard_df))
+mse_herb<-mean(residuals(temporary)^2)
+herbprotein$lsd<- lsd_cal(therb,mse_herb,df4lsd)
+herbprotein$cv<-sqrt(mean(abs(residuals(temporary)^2)))/mean(herbprotein$emmean)*100
+LOCATIONS<-unique(raw3$`Experiment Name`)
+herbprotein$Locations<-list(LOCATIONS)
+herbprotein$Trial<-'herbprotein'
+count<-raw3 %>% dplyr::count(Name1)
+herbprotein$n<-count$n
+herbresults3<-rbind(herbyield,herbprotein,herbtw)
+herbresults3 = subset(herbresults3, select = c(Name1, emmean, cv,lsd,Trial,n,Locations))
+
+herbresults3<-apply(herbresults3,2,as.character)
+#write.csv(herbresults3,csv_nameherb)
+
+```
+
